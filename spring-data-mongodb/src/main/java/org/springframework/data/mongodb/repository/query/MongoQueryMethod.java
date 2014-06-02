@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2013 the original author or authors.
+ * Copyright 2011-2014 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package org.springframework.data.mongodb.repository.query;
 import java.io.Serializable;
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import org.springframework.core.annotation.AnnotationUtils;
@@ -28,6 +29,7 @@ import org.springframework.data.mapping.context.MappingContext;
 import org.springframework.data.mongodb.core.mapping.MongoPersistentEntity;
 import org.springframework.data.mongodb.core.mapping.MongoPersistentProperty;
 import org.springframework.data.mongodb.repository.Query;
+import org.springframework.data.mongodb.repository.Query.CustomQuoting;
 import org.springframework.data.repository.core.RepositoryMetadata;
 import org.springframework.data.repository.query.QueryMethod;
 import org.springframework.data.util.ClassTypeInformation;
@@ -39,8 +41,11 @@ import org.springframework.util.StringUtils;
  * Mongo specific implementation of {@link QueryMethod}.
  * 
  * @author Oliver Gierke
+ * @author Thomas Darimont
  */
 public class MongoQueryMethod extends QueryMethod {
+
+	private static final String CUSTOM_QUOTING = "customQuoting";
 
 	@SuppressWarnings("unchecked") private static final List<Class<? extends Serializable>> GEO_NEAR_RESULTS = Arrays
 			.asList(GeoResult.class, GeoResults.class, GeoPage.class);
@@ -97,6 +102,17 @@ public class MongoQueryMethod extends QueryMethod {
 	}
 
 	/**
+	 * Returns the {@link CustomQuoting} that should be considered when rendering the query object.
+	 * 
+	 * @return
+	 */
+	List<CustomQuoting> getCustomQuoting() {
+
+		CustomQuoting[] customQuoting = (CustomQuoting[]) AnnotationUtils.getValue(getQueryAnnotation(), CUSTOM_QUOTING);
+		return customQuoting != null ? Arrays.asList(customQuoting) : Collections.<CustomQuoting> emptyList();
+	}
+
+	/**
 	 * Returns the field specification to be used for the query.
 	 * 
 	 * @return
@@ -143,7 +159,7 @@ public class MongoQueryMethod extends QueryMethod {
 	}
 
 	/**
-	 * Returns whether te query is a geo near query.
+	 * Returns whether the query is a geo near query.
 	 * 
 	 * @return
 	 */

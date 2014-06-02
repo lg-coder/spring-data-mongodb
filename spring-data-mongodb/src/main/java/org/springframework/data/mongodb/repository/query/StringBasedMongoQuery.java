@@ -15,6 +15,7 @@
  */
 package org.springframework.data.mongodb.repository.query;
 
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -23,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.mongodb.core.MongoOperations;
 import org.springframework.data.mongodb.core.query.BasicQuery;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.repository.Query.CustomQuoting;
 
 import com.mongodb.util.JSON;
 
@@ -31,6 +33,7 @@ import com.mongodb.util.JSON;
  * 
  * @author Oliver Gierke
  * @author Christoph Strobl
+ * @author Thomas Darimont
  */
 public class StringBasedMongoQuery extends AbstractMongoQuery {
 
@@ -42,6 +45,8 @@ public class StringBasedMongoQuery extends AbstractMongoQuery {
 	private final String fieldSpec;
 	private final boolean isCountQuery;
 	private final boolean isDeleteQuery;
+	private final boolean queryIsAlreadyQuoted;
+	private final boolean fieldsAreAlreadyQuoted;
 
 	/**
 	 * Creates a new {@link StringBasedMongoQuery} for the given {@link MongoQueryMethod} and {@link MongoOperations}.
@@ -69,6 +74,10 @@ public class StringBasedMongoQuery extends AbstractMongoQuery {
 		this.isCountQuery = method.hasAnnotatedQuery() ? method.getQueryAnnotation().count() : false;
 		this.isDeleteQuery = method.hasAnnotatedQuery() ? method.getQueryAnnotation().delete() : false;
 
+		List<CustomQuoting> customQuoting = method.getCustomQuoting();
+		this.queryIsAlreadyQuoted = customQuoting.contains(CustomQuoting.QUERY);
+		this.fieldsAreAlreadyQuoted = customQuoting.contains(CustomQuoting.FIELDS);
+
 		if (isCountQuery && isDeleteQuery) {
 			throw new IllegalArgumentException(String.format(COUND_AND_DELETE, method));
 		}
@@ -81,12 +90,12 @@ public class StringBasedMongoQuery extends AbstractMongoQuery {
 	@Override
 	protected Query createQuery(ConvertingParameterAccessor accessor) {
 
-		String queryString = replacePlaceholders(query, accessor);
+		String queryString = replacePlaceholders(query, accessor, queryIsAlreadyQuoted);
 
 		Query query = null;
 
 		if (fieldSpec != null) {
-			String fieldString = replacePlaceholders(fieldSpec, accessor);
+			String fieldString = replacePlaceholders(fieldSpec, accessor, fieldsAreAlreadyQuoted);
 			query = new BasicQuery(queryString, fieldString);
 		} else {
 			query = new BasicQuery(queryString);
@@ -119,7 +128,7 @@ public class StringBasedMongoQuery extends AbstractMongoQuery {
 		return this.isDeleteQuery;
 	}
 
-	private String replacePlaceholders(String input, ConvertingParameterAccessor accessor) {
+	private String replacePlaceholders(String input, ConvertingParameterAccessor accessor, boolean valuesAreAlreadyQuoted) {
 
 		Matcher matcher = PLACEHOLDER.matcher(input);
 		String result = input;
@@ -127,13 +136,20 @@ public class StringBasedMongoQuery extends AbstractMongoQuery {
 		while (matcher.find()) {
 			String group = matcher.group();
 			int index = Integer.parseInt(matcher.group(1));
-			result = result.replace(group, getParameterWithIndex(accessor, index));
+			result = result.replace(group, getParameterWithIndex(accessor, index, valuesAreAlreadyQuoted));
 		}
 
 		return result;
 	}
 
-	private String getParameterWithIndex(ConvertingParameterAccessor accessor, int index) {
+	private String getParameterWithIndex(ConvertingParameterAccessor accessor, int index, boolean valueIsQuoted) {
+
+		Object result = accessor.getBindableValue(index);
+
+		if (result instanceof String && valueIsQuoted) {
+			return (String) result;
+		}
+
 		return JSON.serialize(accessor.getBindableValue(index));
 	}
 }
